@@ -53,9 +53,6 @@ impl Error {
 pub enum IoError {
     #[error("Input/output error: {}", _0)]
     Io(#[source] io::Error),
-
-    #[error("TLS error: `{}'", _0)]
-    Tls(#[source] native_tls::Error),
 }
 
 /// This type represents MySql server error.
@@ -187,12 +184,6 @@ impl From<ServerError> for Error {
 impl From<UrlError> for Error {
     fn from(err: UrlError) -> Self {
         Error::Url(err)
-    }
-}
-
-impl From<native_tls::Error> for IoError {
-    fn from(err: native_tls::Error) -> Self {
-        IoError::Tls(err)
     }
 }
 

@@ -14,7 +14,6 @@ use mysql_common::{
     packets::{
         parse_auth_switch_request, parse_err_packet, parse_handshake_packet, parse_ok_packet,
         AuthPlugin, AuthSwitchRequest, ErrPacket, HandshakeResponse, OkPacket, OkPacketKind,
-        SslRequest,
     },
 };
 
@@ -320,15 +319,6 @@ impl Conn {
         self.disconnect().await
     }
 
-    /// Returns true if io stream is encrypted.
-    fn is_secure(&self) -> bool {
-        if let Some(ref stream) = self.inner.stream {
-            stream.is_secure()
-        } else {
-            false
-        }
-    }
-
     /// Hacky way to move connection through &mut. `self` becomes unusable.
     fn take(&mut self) -> Conn {
         mem::replace(self, Conn::empty(Default::default()))
@@ -374,25 +364,6 @@ impl Conn {
             None => AuthPlugin::MysqlNativePassword,
         };
         Ok(())
-    }
-
-    async fn switch_to_ssl_if_needed(&mut self) -> Result<()> {
-        if self
-            .inner
-            .opts
-            .get_capabilities()
-            .contains(CapabilityFlags::CLIENT_SSL)
-        {
-            let ssl_request = SslRequest::new(self.inner.capabilities);
-            self.write_packet(ssl_request.as_ref()).await?;
-            let conn = self;
-            let ssl_opts = conn.opts().ssl_opts().cloned().expect("unreachable");
-            let domain = conn.opts().ip_or_hostname().into();
-            conn.stream_mut()?.make_secure(domain, ssl_opts).await?;
-            Ok(())
-        } else {
-            Ok(())
-        }
     }
 
     async fn do_handshake_response(&mut self) -> Result<()> {
@@ -487,18 +458,14 @@ impl Conn {
                     let mut pass = self.inner.opts.pass().map(Vec::from).unwrap_or_default();
                     pass.push(0);
 
-                    if self.is_secure() {
-                        self.write_packet(&*pass).await?;
-                    } else {
-                        self.write_packet(&[0x02][..]).await?;
-                        let packet = self.read_packet().await?;
-                        let key = &packet[1..];
-                        for (i, byte) in pass.iter_mut().enumerate() {
-                            *byte ^= self.inner.nonce[i % self.inner.nonce.len()];
-                        }
-                        let encrypted_pass = crypto::encrypt(&*pass, key);
-                        self.write_packet(&*encrypted_pass).await?;
-                    };
+                    self.write_packet(&[0x02][..]).await?;
+                    let packet = self.read_packet().await?;
+                    let key = &packet[1..];
+                    for (i, byte) in pass.iter_mut().enumerate() {
+                        *byte ^= self.inner.nonce[i % self.inner.nonce.len()];
+                    }
+                    let encrypted_pass = crypto::encrypt(&*pass, key);
+                    self.write_packet(&*encrypted_pass).await?;
                     self.drop_packet().await?;
                     Ok(())
                 }
@@ -635,7 +602,6 @@ impl Conn {
             conn.inner.stream = Some(stream);
             conn.setup_stream()?;
             conn.handle_handshake().await?;
-            conn.switch_to_ssl_if_needed().await?;
             conn.do_handshake_response().await?;
             conn.continue_auth().await?;
             conn.switch_to_compression()?;

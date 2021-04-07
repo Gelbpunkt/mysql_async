@@ -20,7 +20,6 @@ lazy_static = "1"
 lru = "0.6.0"
 mio = "0.7.7"
 mysql_common = "0.26.0"
-native-tls = "0.2"
 pem = "0.8.1"
 percent-encoding = "2.1.0"
 pin-project = "1.0.2"
@@ -29,7 +28,6 @@ serde_json = "1"
 thiserror = "1.0.4"
 tokio = { version = "1.0", features = ["io-util", "fs", "net", "time", "rt"] }
 tokio-util = { version = "0.6.0", features = ["codec"] }
-tokio-native-tls = "0.3.0"
 twox-hash = "1"
 url = "2.1"
 uuid = { version = "0.8.1", features = ["v4"] }
